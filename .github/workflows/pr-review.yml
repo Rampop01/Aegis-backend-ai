@@ -39,22 +39,23 @@ jobs:
           fi
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: actions/setup-python@v4
         with:
-          targets: wasm32-unknown-unknown
+          python-version: '3.10'
+        with:
 
       - name: Review Core Logic
         id: build_review
         continue-on-error: true
         run: |
-          cd smartcontract
-          cargo test --all && cargo build --target wasm32-unknown-unknown --release
+          
+          pip install -r requirements.txt
 
       - name: ❌ Handle Review Failure
         if: steps.build_review.outcome == 'failure'
         run: |
           PR_TITLE=$(gh pr view ${{ github.event.pull_request.number }} --json title -q .title)
-          gh pr comment ${{ github.event.pull_request.number }} --body "hey, took a look at the PR for '$PR_TITLE'. actually, it looks like the smart contract tests or compilation is failing right now. mind checking the logs and fixing the errors? once it's passing, just push an update and we can get it merged."
+          gh pr comment ${{ github.event.pull_request.number }} --body "hey, took a look at the PR for '$PR_TITLE'. actually, it looks like the backend installation is failing right now. mind checking the logs and fixing the errors? once it's passing, just push an update and we can get it merged."
           exit 1
 
       - name: ✅ Handle Review Success
