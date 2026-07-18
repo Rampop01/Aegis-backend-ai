@@ -37,3 +37,18 @@ CREATE TABLE IF NOT EXISTS vault_snapshots (
 
 -- Convert vault_snapshots to a hypertable
 SELECT create_hypertable('vault_snapshots', 'timestamp', if_not_exists => TRUE);
+
+-- Table to store sentiment signals collected from social media and news sources
+CREATE TABLE IF NOT EXISTS sentiment_data (
+    "timestamp" TIMESTAMPTZ NOT NULL,
+    source VARCHAR(50) NOT NULL, -- e.g. Twitter/X, Nairametrics
+    keyword VARCHAR(100) NOT NULL, -- matched keyword, e.g. Naira, CBN, inflation
+    content TEXT NOT NULL, -- original post/article text used for scoring
+    sentiment_score NUMERIC NOT NULL -- compound sentiment score, range -1 (negative) to 1 (positive)
+);
+
+-- Convert sentiment_data to a hypertable for timeseries optimization
+SELECT create_hypertable('sentiment_data', 'timestamp', if_not_exists => TRUE);
+
+-- Index to support lookups by keyword over time
+CREATE INDEX IF NOT EXISTS idx_sentiment_data_keyword ON sentiment_data (keyword, "timestamp" DESC);
