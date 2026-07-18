@@ -9,3 +9,5 @@ python-dotenv
 httpx
 pydantic
 soroban-sdk
+feedparser
+vaderSentiment

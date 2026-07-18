@@ -19,7 +19,7 @@ def save_fx_rates(rates):
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            execute_values(cur, 
+            execute_values(cur,
                 "INSERT INTO fx_rates (timestamp, pair, rate, source) VALUES %s ON CONFLICT DO NOTHING",
                 rates
             )
@@ -27,6 +27,26 @@ def save_fx_rates(rates):
     except Exception as e:
         conn.rollback()
         print(f"Error saving FX rates: {e}")
+        raise
+    finally:
+        conn.close()
+
+def save_sentiment_data(records):
+    """
+    Saves a list of sentiment records to the database.
+    Each record should be a tuple (timestamp, source, keyword, content, sentiment_score).
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            execute_values(cur,
+                "INSERT INTO sentiment_data (timestamp, source, keyword, content, sentiment_score) VALUES %s",
+                records
+            )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error saving sentiment data: {e}")
         raise
     finally:
         conn.close()
