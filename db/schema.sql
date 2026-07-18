@@ -52,3 +52,24 @@ SELECT create_hypertable('sentiment_data', 'timestamp', if_not_exists => TRUE);
 
 -- Index to support lookups by keyword over time
 CREATE INDEX IF NOT EXISTS idx_sentiment_data_keyword ON sentiment_data (keyword, "timestamp" DESC);
+
+-- Table to store backtest reports for strategy comparison.
+-- Not a hypertable: rows are created one-per-API-call (low frequency results
+-- log), not a continuously ingested time series like the tables above.
+CREATE TABLE IF NOT EXISTS backtest_results (
+    id BIGSERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    strategy_name VARCHAR(100) NOT NULL,
+    pair VARCHAR(10) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    data_points_used INTEGER NOT NULL,
+    params JSONB NOT NULL, -- input strategy params (window, threshold, capital, apy)
+    strategy_metrics JSONB NOT NULL, -- performance of the volatility-shifting strategy
+    baseline_metrics JSONB NOT NULL, -- performance of a buy-and-hold baseline
+    comparison JSONB NOT NULL -- strategy vs baseline comparison (the report)
+);
+
+-- Indexes to support "past reports" lookups by variant
+CREATE INDEX IF NOT EXISTS idx_backtest_results_pair_created ON backtest_results (pair, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_backtest_results_strategy_created ON backtest_results (strategy_name, created_at DESC);
