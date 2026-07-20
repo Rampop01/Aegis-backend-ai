@@ -111,6 +111,59 @@ def save_backtest_result(strategy_name, pair, start_date, end_date, data_points_
     finally:
         conn.close()
 
+def get_current_prediction(horizon: int = 1):
+    """
+    Returns the most recent prediction row for the given horizon as a dict, or
+    None if no predictions exist yet.
+
+    Columns returned: timestamp, horizon, volatility_score.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT "timestamp", horizon, volatility_score
+                FROM predictions
+                WHERE horizon = %s
+                ORDER BY "timestamp" DESC
+                LIMIT 1
+                """,
+                (horizon,),
+            )
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def get_prediction_history(
+    horizon: int = 1,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """
+    Returns prediction rows for the given horizon, most recent first.
+
+    Columns returned: timestamp, horizon, volatility_score.
+    """
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT "timestamp", horizon, volatility_score
+                FROM predictions
+                WHERE horizon = %s
+                ORDER BY "timestamp" DESC
+                LIMIT %s OFFSET %s
+                """,
+                (horizon, limit, offset),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
 def list_backtest_results(pair=None, strategy_name=None, limit=20, offset=0):
     """
     Returns stored backtest reports ordered by most recent first, optionally
