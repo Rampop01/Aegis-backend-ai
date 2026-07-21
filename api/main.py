@@ -8,11 +8,13 @@ from fastapi import FastAPI
 
 from api.backtest import router as backtest_router
 from api.risk import router as risk_router
+from api.monitoring import router as monitoring_router
 
 app = FastAPI(title="X-Aegis Backend & AI", version="0.1.0")
 
 app.include_router(backtest_router)
 app.include_router(risk_router)
+app.include_router(monitoring_router)
 
 @app.get("/")
 def root():
