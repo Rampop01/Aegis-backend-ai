@@ -65,27 +65,23 @@ jobs:
           fi
 
       - name: Setup Python
-        if: github.event_name == 'pull_request_target'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install Dependencies
-        if: github.event_name == 'pull_request_target'
         run: |
           pip install -r requirements.txt
           pip install pytest ruff
 
       - name: Lint with Ruff
         id: lint_review
-        if: github.event_name == 'pull_request_target'
         continue-on-error: true
         run: |
           ruff check .
 
       - name: Run Tests
         id: build_review
-        if: github.event_name == 'pull_request_target'
         continue-on-error: true
         run: |
           if [ -d "tests" ] || find . -maxdepth 2 -name "test*.py" | grep -q .; then
@@ -95,13 +91,15 @@ jobs:
           fi
 
       - name: ❌ Handle Lint Failure
-        if: github.event_name == 'pull_request_target' && steps.lint_review.outcome == 'failure'
+        if: steps.lint_review.outcome == 'failure'
         run: |
           PR_TITLE=$(gh pr view $PR_NUMBER --json title -q .title)
           gh pr comment $PR_NUMBER --body "Hey @${{ env.AUTHOR }}, the linter (Ruff) flagged some warnings in '$PR_TITLE'. Please run \`ruff check .\` locally and fix the issues before pushing again."
 
+          exit 1
+
       - name: ❌ Handle Review Failure
-        if: github.event_name == 'pull_request_target' && steps.build_review.outcome == 'failure'
+        if: steps.build_review.outcome == 'failure'
         run: |
           PR_TITLE=$(gh pr view $PR_NUMBER --json title -q .title)
           RESPONSES=(
@@ -118,7 +116,7 @@ jobs:
 
       - name: 🤖 AI Code Review (Claude)
         id: ai_review
-        if: (github.event_name == 'pull_request_target' && steps.build_review.outcome == 'success' && steps.lint_review.outcome == 'success') || github.event_name == 'issue_comment'
+        if: steps.build_review.outcome == 'success' && steps.lint_review.outcome == 'success'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
@@ -278,7 +276,7 @@ jobs:
           node ai_review.js
 
       - name: ✅ Handle Review Success
-        if: (github.event_name == 'pull_request_target' && steps.build_review.outcome == 'success' && steps.lint_review.outcome == 'success') || github.event_name == 'issue_comment'
+        if: steps.build_review.outcome == 'success' && steps.lint_review.outcome == 'success'
         run: |
           PR_TITLE=$(gh pr view $PR_NUMBER --json title -q .title)
           PR_NUMBER=$PR_NUMBER
