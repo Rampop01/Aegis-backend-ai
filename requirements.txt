@@ -11,3 +11,6 @@ pydantic
 soroban-sdk
 feedparser
 vaderSentiment
+boto3
+pytest
+pytest-asyncio
