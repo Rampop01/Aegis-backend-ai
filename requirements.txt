@@ -4,10 +4,12 @@ uvicorn[standard]
 pandas
 numpy
 scikit-learn
-prophet
 python-dotenv
 httpx
 pydantic
-soroban-sdk
+stellar-sdk
 feedparser
 vaderSentiment
+boto3
+pytest
+pytest-asyncio
