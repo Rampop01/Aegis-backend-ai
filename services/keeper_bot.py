@@ -8,12 +8,12 @@ recommendation changes by more than REBALANCE_THRESHOLD, it:
   3. Submits the signed transaction to the Soroban RPC endpoint.
 """
 
-import os
-import sys
 import asyncio
 import hashlib
 import json
 import logging
+import os
+import sys
 from datetime import datetime, timezone
 
 import httpx
@@ -149,8 +149,9 @@ async def sign_with_aws_kms(tx_bytes: bytes) -> str:
     Requires: boto3  (`pip install boto3`)
     """
     try:
-        import boto3  # type: ignore
         import base64
+
+        import boto3  # type: ignore
 
         client = boto3.client("kms", region_name=AWS_REGION)
         digest = hashlib.sha256(tx_bytes).digest()
@@ -201,11 +202,11 @@ async def sign_with_env_key(tx_bytes: bytes) -> str:
     Signs tx_bytes using an HMAC-SHA256 derived from the env secret key.
     For development/testing only — not suitable for production.
     """
-    import hmac
     import base64
+    import hmac
 
     if not ADMIN_SECRET_KEY_HEX:
-        raise EnvironmentError(
+        raise OSError(
             "ADMIN_SECRET_KEY_HEX is not set. "
             "Provide a signing key or configure AWS KMS / HashiCorp Vault."
         )
@@ -346,7 +347,7 @@ class KeeperBot:
         try:
             tx_bytes = _encode_transaction_xdr(tx_payload)
             signature = await sign_transaction(tx_bytes)
-        except (EnvironmentError, RuntimeError, OSError, ValueError) as exc:
+        except (RuntimeError, OSError, ValueError) as exc:
             log.error("Signing failed — aborting submission: %s", exc)
             return
 

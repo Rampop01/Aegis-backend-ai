@@ -3,10 +3,9 @@ Tests for services/keeper_bot.py
 """
 
 import asyncio
-import json
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -14,7 +13,6 @@ import pytest
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import services.keeper_bot as kb
-
 
 # ---------------------------------------------------------------------------
 # Helpers
