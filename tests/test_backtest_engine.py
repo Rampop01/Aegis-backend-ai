@@ -60,3 +60,35 @@ def test_run_backtest_stable_apy_accrues_when_shielded():
 
     assert result["strategy_metrics"]["time_in_stable_pct"] > 0
     assert result["strategy_metrics"]["final_value"] > 0
+
+
+def test_run_backtest_reports_sharpe_and_win_rate_metrics():
+    rows = _series([1500.0 + (i % 4) for i in range(30)])
+    result = run_backtest(rows, volatility_window=5, threshold=50, initial_capital=10000, stable_apy=0)
+
+    for metrics in (result["strategy_metrics"], result["baseline_metrics"]):
+        assert "sharpe_ratio" in metrics
+        assert "win_rate_pct" in metrics
+        assert 0.0 <= metrics["win_rate_pct"] <= 100.0
+
+    assert "sharpe_improvement" in result["comparison"]
+
+
+def test_run_backtest_flat_series_has_zero_sharpe_and_win_rate():
+    rows = _series([1500.0] * 20)
+    result = run_backtest(rows, volatility_window=5, threshold=80, initial_capital=10000, stable_apy=0)
+
+    # No dispersion and no positive periods -> both metrics collapse to 0.
+    assert result["baseline_metrics"]["sharpe_ratio"] == pytest.approx(0.0, abs=1e-12)
+    assert result["baseline_metrics"]["win_rate_pct"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_run_backtest_win_rate_counts_only_up_periods():
+    # Strictly rising rate means the local currency weakens every period, so a
+    # buy-and-hold (baseline) USD portfolio loses value every single period.
+    rows = _series([1500.0 * (1.01 ** i) for i in range(20)])
+    result = run_backtest(rows, volatility_window=5, threshold=101, initial_capital=10000, stable_apy=0)
+
+    # threshold=101 is never crossed, so the strategy never shields -> identical
+    # to buy-and-hold, and no period ever ends positive.
+    assert result["baseline_metrics"]["win_rate_pct"] == pytest.approx(0.0, abs=1e-12)
