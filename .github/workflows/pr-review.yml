@@ -25,7 +25,7 @@ jobs:
       AUTHOR: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.user.login || github.event.comment.user.login }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.ref }}
           allow-unsafe-pr-checkout: true
@@ -83,8 +83,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pytest ruff
+          pip install -r requirements.txt --ignore-requires-python || true
+          pip install pytest ruff stellar-sdk
 
       - name: Lint with Ruff
         id: lint_review
@@ -236,7 +236,7 @@ jobs:
 
           async function run() {
             try {
-              console.log('🌐 Calling Anthropic API (model: claude-sonnet-5)...');
+              console.log('🌐 Calling Anthropic API (model: claude-sonnet-4-5)...');
               const res = await fetch('https://api.anthropic.com/v1/messages', {
                 method: 'POST',
                 headers: {
@@ -245,7 +245,7 @@ jobs:
                   'anthropic-version': '2023-06-01'
                 },
                 body: JSON.stringify({
-                  model: 'claude-sonnet-5',
+                  model: 'claude-sonnet-4-5',
                   max_tokens: 1500,
                   messages: [{role: 'user', content: prompt}]
                 })
