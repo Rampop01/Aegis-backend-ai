@@ -165,7 +165,7 @@ async def sign_with_aws_kms(tx_bytes: bytes) -> str:
         log.info("Transaction signed via AWS KMS (key: %s)", AWS_KMS_KEY_ID)
         return signature_b64
 
-    except Exception as exc:
+    except (ImportError, RuntimeError, OSError, ValueError) as exc:
         log.error("AWS KMS signing failed: %s", exc)
         raise
 
@@ -191,7 +191,7 @@ async def sign_with_vault(tx_bytes: bytes) -> str:
             log.info("Transaction signed via HashiCorp Vault (path: %s)", VAULT_KEY_PATH)
             return signature
 
-    except Exception as exc:
+    except (httpx.RequestError, httpx.HTTPStatusError, KeyError, ValueError) as exc:
         log.error("HashiCorp Vault signing failed: %s", exc)
         raise
 
@@ -299,7 +299,7 @@ class KeeperBot:
         # 1. Fetch current volatility score
         try:
             score = await fetch_volatility_score()
-        except Exception as exc:
+        except (httpx.RequestError, httpx.HTTPStatusError, KeyError, ValueError) as exc:
             log.error("Failed to fetch volatility score: %s", exc)
             return
 
@@ -346,7 +346,7 @@ class KeeperBot:
         try:
             tx_bytes = _encode_transaction_xdr(tx_payload)
             signature = await sign_transaction(tx_bytes)
-        except Exception as exc:
+        except (EnvironmentError, RuntimeError, OSError, ValueError) as exc:
             log.error("Signing failed — aborting submission: %s", exc)
             return
 
@@ -355,7 +355,7 @@ class KeeperBot:
             await submit_to_soroban(tx_payload, signature)
             self._last_allocation = target
             log.info("Rebalance submitted successfully. New allocation: %.1f %% stable.", target)
-        except Exception as exc:
+        except (httpx.RequestError, httpx.HTTPStatusError, RuntimeError) as exc:
             log.error("Soroban submission failed: %s", exc)
 
     async def run(self) -> None:

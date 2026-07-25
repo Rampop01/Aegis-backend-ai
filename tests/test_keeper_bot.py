@@ -8,6 +8,7 @@ import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -196,7 +197,8 @@ class TestKeeperBotRunOnce:
     def test_handles_api_fetch_failure_gracefully(self, monkeypatch):
         bot = self._bot()
         monkeypatch.setattr(
-            kb, "fetch_volatility_score", AsyncMock(side_effect=Exception("timeout"))
+            kb, "fetch_volatility_score",
+            AsyncMock(side_effect=httpx.RequestError("timeout")),
         )
         mock_submit = AsyncMock()
         monkeypatch.setattr(kb, "submit_to_soroban", mock_submit)
