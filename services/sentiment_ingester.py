@@ -71,7 +71,7 @@ async def fetch_twitter_sentiment():
                 for keyword in keywords:
                     records.append((timestamp, "Twitter/X", keyword, text, score))
             return records
-    except (httpx.RequestError, httpx.HTTPStatusError, KeyError, ValueError) as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error fetching from Twitter/X: {e}")
         return []
 
@@ -99,7 +99,7 @@ async def fetch_news_sentiment():
                 score = _score_text(text)
                 for keyword in keywords:
                     records.append((timestamp, source_name, keyword, text, score))
-        except (OSError, ValueError, TypeError) as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Error fetching from {source_name}: {e}")
 
     return records
