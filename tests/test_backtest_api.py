@@ -88,8 +88,8 @@ def test_get_backtest_results_returns_stored_reports(monkeypatch):
         "created_at": datetime(2026, 1, 6, tzinfo=timezone.utc),
         "strategy_name": "test-strategy",
         "pair": "USD/NGN",
-        "start_date": datetime(2026, 1, 1).date(),
-        "end_date": datetime(2026, 1, 5).date(),
+        "start_date": datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+        "end_date": datetime(2026, 1, 5, tzinfo=timezone.utc).date(),
         "data_points_used": 30,
         "params": {"volatility_window": 5, "threshold": 50, "initial_capital": 10000, "stable_apy": 0},
         "strategy_metrics": {
