@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 import httpx
 from dotenv import load_dotenv
 
+from stellar_sdk import Server, Network, Keypair, TransactionBuilder, scval
+
 # ---------------------------------------------------------------------------
 # Add project root to sys.path for local imports
 # ---------------------------------------------------------------------------
@@ -63,8 +65,8 @@ VAULT_ADDR: str = os.getenv("VAULT_ADDR", "http://127.0.0.1:8200")
 VAULT_TOKEN: str = os.getenv("VAULT_TOKEN", "")
 VAULT_KEY_PATH: str = os.getenv("VAULT_KEY_PATH", "transit/sign/admin-key")
 
-# Fallback signing key — hex-encoded 32-byte secret (dev/test only)
-ADMIN_SECRET_KEY_HEX: str = os.getenv("ADMIN_SECRET_KEY_HEX", "")
+# Local Wallet signing key — standard Stellar Secret Key (S...)
+ADMIN_SECRET_KEY: str = os.getenv("ADMIN_SECRET_KEY", "")
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -96,169 +98,73 @@ def compute_target_allocation(volatility_score: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Transaction building
+# Transaction building & Submission (Stellar SDK)
 # ---------------------------------------------------------------------------
 
-def build_rebalance_transaction(
+def execute_rebalance_transaction(
     target_stable_pct: float,
     volatility_score: float,
     contract_id: str,
-    source_account: str,
+    source_secret: str,
 ) -> dict:
     """
-    Constructs the rebalance transaction payload that will be sent to the
-    Soroban RPC.
-
-    In a full production deployment this would use the Stellar Python SDK to
-    produce a proper XDR-encoded Soroban `invokeHostFunction` transaction.
-    Here we build a structured dict that represents the intent; the XDR
-    serialization step is handled in `_encode_transaction_xdr`.
+    Constructs, simulates, signs, and submits a real Soroban transaction
+    using the official stellar-sdk.
     """
-    return {
-        "contract_id": contract_id,
-        "function": "rebalance",
-        "args": {
-            "target_stable_pct": int(target_stable_pct),
-            "volatility_score": round(volatility_score, 4),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
-        "source_account": source_account,
-        "network_passphrase": SOROBAN_NETWORK_PASSPHRASE,
-    }
+    if SIGNING_BACKEND in ["aws_kms", "vault"]:
+        # TODO: Implement XDR parsing and raw signature injection for enterprise HSMs.
+        log.warning("Enterprise signing (KMS/Vault) selected but not yet implemented for Soroban XDR. Falling back to local wallet if available.")
 
+    if not source_secret:
+        raise OSError("ADMIN_SECRET_KEY is not set. Cannot sign transaction.")
 
-def _encode_transaction_xdr(tx_payload: dict) -> bytes:
-    """
-    Encodes the transaction payload as canonical bytes ready for signing.
-
-    Production note: replace this with actual XDR serialisation using the
-    `stellar-sdk` library (`stellar_sdk.TransactionEnvelope`).
-    """
-    canonical = json.dumps(tx_payload, sort_keys=True, separators=(",", ":"))
-    return canonical.encode("utf-8")
-
-
-# ---------------------------------------------------------------------------
-# Signing backends
-# ---------------------------------------------------------------------------
-
-async def sign_with_aws_kms(tx_bytes: bytes) -> str:
-    """
-    Signs tx_bytes using AWS KMS (asymmetric SIGN_VERIFY key).
-    Returns the base-64 encoded DER signature string.
-    Requires: boto3  (`pip install boto3`)
-    """
-    try:
-        import base64
-
-        import boto3  # type: ignore
-
-        client = boto3.client("kms", region_name=AWS_REGION)
-        digest = hashlib.sha256(tx_bytes).digest()
-
-        response = client.sign(
-            KeyId=AWS_KMS_KEY_ID,
-            Message=digest,
-            MessageType="DIGEST",
-            SigningAlgorithm="ECDSA_SHA_256",
+    server = Server(SOROBAN_RPC_URL)
+    keypair = Keypair.from_secret(source_secret)
+    
+    log.info("Loading account details for %s...", keypair.public_key)
+    source_account = server.load_account(keypair.public_key)
+    
+    # 1. Build the base transaction
+    tx = (
+        TransactionBuilder(
+            source_account=source_account,
+            network_passphrase=SOROBAN_NETWORK_PASSPHRASE,
+            base_fee=1000,
         )
-        signature_b64 = base64.b64encode(response["Signature"]).decode()
-        log.info("Transaction signed via AWS KMS (key: %s)", AWS_KMS_KEY_ID)
-        return signature_b64
-
-    except (ImportError, RuntimeError, OSError, ValueError) as exc:
-        log.error("AWS KMS signing failed: %s", exc)
-        raise
-
-
-async def sign_with_vault(tx_bytes: bytes) -> str:
-    """
-    Signs tx_bytes using HashiCorp Vault Transit secrets engine.
-    Returns the Vault-provided signature string.
-    """
-    try:
-        import base64
-
-        encoded = base64.b64encode(tx_bytes).decode()
-        url = f"{VAULT_ADDR}/v1/{VAULT_KEY_PATH}"
-        headers = {"X-Vault-Token": VAULT_TOKEN}
-        payload = {"input": encoded}
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload, headers=headers, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            signature = data["data"]["signature"]
-            log.info("Transaction signed via HashiCorp Vault (path: %s)", VAULT_KEY_PATH)
-            return signature
-
-    except (httpx.RequestError, httpx.HTTPStatusError, KeyError, ValueError) as exc:
-        log.error("HashiCorp Vault signing failed: %s", exc)
-        raise
-
-
-async def sign_with_env_key(tx_bytes: bytes) -> str:
-    """
-    Signs tx_bytes using an HMAC-SHA256 derived from the env secret key.
-    For development/testing only — not suitable for production.
-    """
-    import base64
-    import hmac
-
-    if not ADMIN_SECRET_KEY_HEX:
-        raise OSError(
-            "ADMIN_SECRET_KEY_HEX is not set. "
-            "Provide a signing key or configure AWS KMS / HashiCorp Vault."
+        .append_invoke_contract_function_op(
+            contract_id=contract_id,
+            function_name="rebalance",
+            parameters=[scval.to_address(keypair.public_key)]
         )
-
-    secret = bytes.fromhex(ADMIN_SECRET_KEY_HEX)
-    sig = hmac.new(secret, tx_bytes, hashlib.sha256).digest()
-    signature = base64.b64encode(sig).decode()
-    log.warning("Transaction signed with env key — use KMS or Vault in production.")
-    return signature
-
-
-async def sign_transaction(tx_bytes: bytes) -> str:
-    """Dispatches to the configured signing backend."""
-    if SIGNING_BACKEND == "aws_kms":
-        return await sign_with_aws_kms(tx_bytes)
-    if SIGNING_BACKEND == "vault":
-        return await sign_with_vault(tx_bytes)
-    # Default / fallback
-    return await sign_with_env_key(tx_bytes)
-
-
-# ---------------------------------------------------------------------------
-# Soroban RPC submission
-# ---------------------------------------------------------------------------
-
-async def submit_to_soroban(tx_payload: dict, signature: str) -> dict:
-    """
-    Sends the signed transaction to the Soroban RPC endpoint using the
-    `sendTransaction` JSON-RPC method.
-
-    Production note: wrap this with proper XDR + stellar-sdk `Server.send_transaction`.
-    """
-    envelope = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "sendTransaction",
-        "params": {
-            "transaction": json.dumps(tx_payload),
-            "signature": signature,
-        },
-    }
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(SOROBAN_RPC_URL, json=envelope)
-        response.raise_for_status()
-        result = response.json()
-
-    if "error" in result:
-        raise RuntimeError(f"Soroban RPC error: {result['error']}")
-
-    log.info("Soroban submission result: %s", result.get("result"))
-    return result
+        .set_timeout(30)
+        .build()
+    )
+    
+    # 2. Simulate transaction to get footprint and resource fees
+    log.info("Simulating transaction to fetch Soroban footprint...")
+    sim_result = server.simulate_transaction(tx)
+    
+    if hasattr(sim_result, "error") and sim_result.error:
+        raise RuntimeError(f"Simulation failed: {sim_result.error}")
+        
+    log.info("Simulation successful. Applying footprint and fees.")
+    tx.soroban_data = sim_result.transactionData
+    
+    if hasattr(sim_result, "minResourceFee"):
+        tx.add_resource_fee(int(sim_result.minResourceFee))
+        
+    # 3. Sign the transaction
+    tx.sign(keypair)
+    
+    # 4. Submit to network
+    log.info("Submitting transaction to network...")
+    send_response = server.send_transaction(tx)
+    
+    if send_response.get("errorResultXdr"):
+        raise RuntimeError(f"Transaction submission failed: {send_response['errorResultXdr']}")
+        
+    log.info("Transaction submitted! Hash: %s", send_response.get("hash"))
+    return send_response
 
 
 # ---------------------------------------------------------------------------
@@ -326,38 +232,28 @@ class KeeperBot:
         else:
             log.info("First run — submitting initial allocation.")
 
-        # 4. Guard: require contract and account config
-        if not SOROBAN_CONTRACT_ID or not SOROBAN_SOURCE_ACCOUNT:
+        # 4. Guard: require contract config
+        if not SOROBAN_CONTRACT_ID or not ADMIN_SECRET_KEY:
             log.error(
-                "SOROBAN_CONTRACT_ID or SOROBAN_SOURCE_ACCOUNT is not configured. "
+                "SOROBAN_CONTRACT_ID or ADMIN_SECRET_KEY is not configured. "
                 "Skipping submission."
             )
             return
 
-        # 5. Build transaction
-        tx_payload = build_rebalance_transaction(
-            target_stable_pct=target,
-            volatility_score=score,
-            contract_id=SOROBAN_CONTRACT_ID,
-            source_account=SOROBAN_SOURCE_ACCOUNT,
-        )
-        log.info("Built rebalance transaction: %s", json.dumps(tx_payload))
-
-        # 6. Sign
+        # 5. Build, sign, and submit via Stellar SDK
         try:
-            tx_bytes = _encode_transaction_xdr(tx_payload)
-            signature = await sign_transaction(tx_bytes)
-        except (RuntimeError, OSError, ValueError) as exc:
-            log.error("Signing failed — aborting submission: %s", exc)
-            return
-
-        # 7. Submit
-        try:
-            await submit_to_soroban(tx_payload, signature)
+            # We run this synchronous stellar-sdk process in the asyncio loop thread
+            # since this bot only polls once an hour and won't block high-traffic endpoints.
+            execute_rebalance_transaction(
+                target_stable_pct=target,
+                volatility_score=score,
+                contract_id=SOROBAN_CONTRACT_ID,
+                source_secret=ADMIN_SECRET_KEY,
+            )
             self._last_allocation = target
             log.info("Rebalance submitted successfully. New allocation: %.1f %% stable.", target)
-        except (httpx.RequestError, httpx.HTTPStatusError, RuntimeError) as exc:
-            log.error("Soroban submission failed: %s", exc)
+        except Exception as exc:
+            log.error("Soroban transaction failed: %s", exc)
 
     async def run(self) -> None:
         """Main loop: poll every POLL_INTERVAL_SECONDS."""
