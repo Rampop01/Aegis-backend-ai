@@ -17,6 +17,11 @@
 
 > **The Intelligence Layer of the Aegis Volatility Shield.**
 
+## 🚀 Deployment Status
+- **Backend API:** Deployed on Render
+- **URL:** [https://aegis-backend-ai.onrender.com](https://aegis-backend-ai.onrender.com)
+- **Status:** Live & processing AI risk algorithms
+
 ---
 
 ## 📈 Overview
