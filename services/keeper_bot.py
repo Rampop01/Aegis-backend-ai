@@ -9,17 +9,13 @@ recommendation changes by more than REBALANCE_THRESHOLD, it:
 """
 
 import asyncio
-import hashlib
-import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 
 import httpx
 from dotenv import load_dotenv
-
-from stellar_sdk import Server, Network, Keypair, TransactionBuilder, scval
+from stellar_sdk import Keypair, Server, TransactionBuilder, scval
 
 # ---------------------------------------------------------------------------
 # Add project root to sys.path for local imports
@@ -252,7 +248,7 @@ class KeeperBot:
             )
             self._last_allocation = target
             log.info("Rebalance submitted successfully. New allocation: %.1f %% stable.", target)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep the hourly loop alive on any SDK error
             log.error("Soroban transaction failed: %s", exc)
 
     async def run(self) -> None:
