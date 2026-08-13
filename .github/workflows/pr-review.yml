@@ -111,16 +111,6 @@ jobs:
             exit 1
           fi
 
-      - name: 🔑 Token Pre-flight (merge permission check)
-        run: |
-          CAN_PUSH=$(gh api repos/${{ github.repository }} --jq '.permissions.push' 2>/dev/null || echo "false")
-          if [ "$CAN_PUSH" != "true" ]; then
-            echo "❌ MAINTAINER_TOKEN is not set (or lacks push rights). Falling back to GITHUB_TOKEN would block merges."
-            gh pr comment $PR_NUMBER --body "⚠️ **Token misconfiguration**: the automation token (\`MAINTAINER_TOKEN\`) is missing or lacks push permission on this repository, so auto-merge is disabled. Please configure \`MAINTAINER_TOKEN\` in repo/org secrets."
-            exit 1
-          fi
-          echo "✅ Token pre-flight OK: merge permission confirmed."
-
       - name: 🕓 Already-Reviewed SHA Check (dedupe)
         run: |
           HEAD_SHA=$(gh pr view $PR_NUMBER --json headRefOid -q .headRefOid)
@@ -360,38 +350,36 @@ jobs:
           gh pr review $PR_NUMBER --request-changes --body-file feedback.txt
           exit 1
 
-      - name: ✅ Handle Review Success (Approve & Merge)
+      - name: ✅ AI Review Passed — Notify Maintainer
         if: env.AI_RESULT == 'PASS' && steps.build_review.outcome == 'success' && steps.lint_review.outcome == 'success'
         run: |
           PR_TITLE=$(gh pr view $PR_NUMBER --json title -q .title)
-          OWNER="${{ github.repository_owner }}"
-          REPO="${{ github.event.repository.name }}"
-
+          echo "PR_TITLE=$PR_TITLE" >> "$GITHUB_ENV"
           SELECTED_RESPONSE=$(cat ai_approval.txt)
-          echo "🤖 Using AI-generated approval comment."
+          echo "🤖 AI review passed for PR #${PR_NUMBER}. Posting advisory review comment."
+          gh pr review "$PR_NUMBER" --comment -b "$SELECTED_RESPONSE"
+          echo "🕐 Requesting human maintainer review before merge."
+          gh pr edit "$PR_NUMBER" --add-reviewer bbkenny || echo "Reviewer already assigned or cannot self-request — proceeding."
+          echo "MAINTAINER_NOTIFIED=true" >> "$GITHUB_ENV"
 
-          gh pr review "$PR_NUMBER" --approve -b "$SELECTED_RESPONSE"
+      - name: 📧 Email Maintainer (Final Review + Merge)
+        if: env.AI_RESULT == 'PASS' && env.MAINTAINER_NOTIFIED == 'true' && secrets.SMTP_HOST != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "[Aegis] PR #${{ env.PR_NUMBER }} passed review — ready for final merge"
+          to: ${{ secrets.MAIL_TO }}
+          from: ${{ secrets.MAIL_FROM }}
+          body: |
+            PR #${{ env.PR_NUMBER }} (${{ env.PR_TITLE }}) has passed all automated checks and the AI advisory review.
 
-          allowed=$(gh api repos/"$OWNER"/"$REPO" -q '.allow_auto_merge' 2>/dev/null || echo "false")
-          if [ "$allowed" = "true" ]; then
-            echo "Auto-merge is allowed; attempting auto-merge for PR #${PR_NUMBER}..."
-            if gh pr merge "$PR_NUMBER" --auto --merge; then
-              echo "Auto-merge enabled for PR #${PR_NUMBER}."
-            else
-              echo "Auto-merge request failed; attempting direct merge..."
-              gh pr merge "$PR_NUMBER" --merge || \
-                gh pr comment "$PR_NUMBER" --body "Review passed and PR approved. Auto-merge could not be enabled automatically — please merge manually when ready."
-            fi
-          else
-            echo "Auto-merge disabled for $OWNER/$REPO; attempting direct merge..."
-            if gh pr merge "$PR_NUMBER" --merge; then
-              echo "PR #${PR_NUMBER} merged directly."
-            else
-              gh pr comment "$PR_NUMBER" --body "Review passed and PR approved. Auto-merge is disabled for this repository — please merge manually when ready."
-            fi
-          fi
+            Please do your final human review and merge when ready:
+            ${{ github.server_url }}/${{ github.repository }}/pull/${{ env.PR_NUMBER }}
 
       - name: 💬 AI Review Unavailable Notice
         if: env.AI_RESULT == 'SKIP' && env.SKIP_REVIEW != 'true'
         run: |
-          echo "AI review skipped (already noticed via comment). PR left for manual review — no auto-merge."
+          echo "AI review skipped. PR left for human maintainer review."
