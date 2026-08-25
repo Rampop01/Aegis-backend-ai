@@ -1,5 +1,6 @@
 import os
 import sys
+import typing
 from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Query
@@ -17,11 +18,28 @@ class BacktestRequest(BaseModel):
     pair: str = Field(..., description="FX pair as stored in fx_rates, e.g. 'USD/NGN'")
     start_date: date
     end_date: date
-    strategy_name: str = Field("default", description="Label used to compare variants later")
-    volatility_window: int = Field(24, ge=2, le=500, description="Rolling window size (periods) for the volatility signal")
-    threshold: float = Field(80.0, ge=0, le=100, description="Volatility score above which the strategy shifts to stable")
+    strategy_name: str = Field(
+        "default", description="Label used to compare variants later"
+    )
+    volatility_window: int = Field(
+        24,
+        ge=2,
+        le=500,
+        description="Rolling window size (periods) for the volatility signal",
+    )
+    threshold: float = Field(
+        80.0,
+        ge=0,
+        le=100,
+        description="Volatility score above which the strategy shifts to stable",
+    )
     initial_capital: float = Field(10000.0, gt=0)
-    stable_apy: float = Field(0.0, ge=0, le=100, description="Annualized yield earned while allocated to stable")
+    stable_apy: float = Field(
+        0.0,
+        ge=0,
+        le=100,
+        description="Annualized yield earned while allocated to stable",
+    )
 
 
 class BacktestMetrics(BaseModel):
@@ -58,7 +76,9 @@ class BacktestResult(BaseModel):
 def create_backtest(request: BacktestRequest):
     """Runs a backtest for the given strategy params and date range, and stores the report."""
     if request.start_date >= request.end_date:
-        raise HTTPException(status_code=400, detail="start_date must be before end_date")
+        raise HTTPException(
+            status_code=400, detail="start_date must be before end_date"
+        )
 
     rate_rows = get_fx_rate_series(request.pair, request.start_date, request.end_date)
     if not rate_rows:
@@ -114,11 +134,13 @@ def create_backtest(request: BacktestRequest):
 
 @router.get("/results", response_model=list[BacktestResult])
 def get_backtest_results(
-    pair: str | None = None,
-    strategy_name: str | None = None,
+    pair: typing.Optional[str] = None,
+    strategy_name: typing.Optional[str] = None,
     limit: int = Query(20, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     """Retrieves past backtest reports, optionally filtered by pair and/or strategy_name, for comparing variants."""
-    rows = list_backtest_results(pair=pair, strategy_name=strategy_name, limit=limit, offset=offset)
+    rows = list_backtest_results(
+        pair=pair, strategy_name=strategy_name, limit=limit, offset=offset
+    )
     return [BacktestResult(**row) for row in rows]
