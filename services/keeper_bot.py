@@ -1,4 +1,3 @@
-import typing
 
 """
 Keeper Bot — Off-chain worker (BK-5)
@@ -215,7 +214,7 @@ class KeeperBot:
     """Stateful keeper that remembers the last submitted allocation."""
 
     def __init__(self) -> None:
-        self._last_allocation: typing.Optional[float] = None
+        self._last_allocation: float | None = None
 
     async def run_once(self) -> None:
         """Single poll-and-rebalance cycle."""

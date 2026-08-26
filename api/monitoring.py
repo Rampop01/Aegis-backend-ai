@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import os
 import sys
-import typing
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Query
@@ -92,8 +91,8 @@ class DriftReportResponse(BaseModel):
     predicted: float
     actual: float
     abs_error: float
-    rolling_mae: typing.Optional[float]
-    rolling_rmse: typing.Optional[float]
+    rolling_mae: float | None
+    rolling_rmse: float | None
     adwin_drift_detected: bool
     ph_drift_detected: bool
     drift_detected: bool
@@ -108,8 +107,8 @@ class DriftEventRow(BaseModel):
     predicted: float
     actual: float
     abs_error: float
-    rolling_mae: typing.Optional[float]
-    rolling_rmse: typing.Optional[float]
+    rolling_mae: float | None
+    rolling_rmse: float | None
     adwin_drift_detected: bool
     ph_drift_detected: bool
     ph_statistic: float
