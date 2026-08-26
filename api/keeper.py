@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -50,7 +50,13 @@ def get_status():
     )
 
 
-@router.post("/restart_circuit")
+def require_admin_token(x_admin_token: str = Header(...)):
+    expected = os.getenv("KEEPER_ADMIN_TOKEN")
+    if not expected or x_admin_token != expected:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.post("/restart_circuit", dependencies=[Depends(require_admin_token)])
 def restart_circuit():
     """
     Admin endpoint to reset the circuit breaker and dead-man switch after inspection.

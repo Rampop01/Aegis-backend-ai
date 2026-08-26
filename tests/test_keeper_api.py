@@ -52,10 +52,29 @@ def test_keeper_status_dead_man(monkeypatch):
     assert data["consecutive_failures"] == 0
 
 
-def test_restart_circuit(monkeypatch):
+def test_restart_circuit_unauthorized(monkeypatch):
+    monkeypatch.setenv("KEEPER_ADMIN_TOKEN", "test-token")
     mock_reset = lambda: None
     monkeypatch.setattr("api.keeper.reset_keeper_circuit", mock_reset)
 
+    # Missing header
     response = client.post("/keeper/restart_circuit")
+    assert response.status_code == 422
+
+    # Wrong header
+    response = client.post(
+        "/keeper/restart_circuit", headers={"x-admin-token": "wrong"}
+    )
+    assert response.status_code == 403
+
+
+def test_restart_circuit_authorized(monkeypatch):
+    monkeypatch.setenv("KEEPER_ADMIN_TOKEN", "test-token")
+    mock_reset = lambda: None
+    monkeypatch.setattr("api.keeper.reset_keeper_circuit", mock_reset)
+
+    response = client.post(
+        "/keeper/restart_circuit", headers={"x-admin-token": "test-token"}
+    )
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "message": "Circuit reset successfully"}
